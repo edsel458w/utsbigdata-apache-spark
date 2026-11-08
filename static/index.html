@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Hybrid Spark & Hadoop Dashboard</title>
+    <title>Hybrid Spark & Hadoop Dashboard - Clinical Lab Analytics</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, sans-serif;
@@ -117,7 +117,6 @@
             font-weight: bold;
         }
 
-        /* CSS Tabel Dalam Card */
         .table-wrapper {
             overflow-x: auto;
             max-height: 350px;
@@ -153,14 +152,14 @@
 </head>
 
 <body>
-    <h2>🩺 Dashboard Analisis Medis <span id="mode-badge" style="font-size: 0.6em; padding: 4px 10px; border-radius: 6px; background: #e2e8f0; color: #333; vertical-align: middle;">Memuat Mode...</span></h2>
-    <a href="/tables" class="nav-btn">Lihat Full Raw Data ➔</a>
+    <h2>🧪 Dashboard Clinical Laboratory Analytics (5V Big Data) <span id="mode-badge" style="font-size: 0.6em; padding: 4px 10px; border-radius: 6px; background: #e2e8f0; color: #333; vertical-align: middle;">Memuat Mode...</span></h2>
+    <a href="/tables" class="nav-btn">Lihat Full Raw Data (CSV & JSON) ➔</a>
 
     <div class="container">
 
         <div class="card analytics-card">
             <div class="analytics-header">
-                <h3>Dashboard Analitik Waktu Eksekusi</h3>
+                <h3>Dashboard Analitik Waktu Eksekusi (Spark vs Hadoop)</h3>
                 <div class="legend">
                     <span><i class="legend-dot" style="background:#2185d0"></i>Spark</span>
                     <span><i class="legend-dot" style="background:#e49b22"></i>Hadoop</span>
@@ -172,12 +171,15 @@
 
         <!-- DataFrame Card -->
         <div class="card">
-            <h3>Filter Rekam Medis (DataFrame)</h3>
-            <label>Radius Tumor Min:</label>
-            <input type="number" id="radiusInput" value="20.0" step="0.5">
+            <h3>Filter Utilisasi & Hasil Lab (DataFrame SQL Join)</h3>
+            <label>Nilai Hasil Lab Min:</label>
+            <input type="number" id="radiusInput" value="140.0" step="5.0">
             <select id="diagInput">
-                <option value="M">Malignant (Ganas)</option>
-                <option value="B">Benign (Jinak)</option>
+                <option value="ICU">ICU (Intensive Care)</option>
+                <option value="ER">ER (Emergency Room)</option>
+                <option value="Cardiology">Cardiology</option>
+                <option value="Inpatient">Inpatient (Rawat Inap)</option>
+                <option value="Outpatient">Outpatient (Rawat Jalan)</option>
             </select>
             <button onclick="fetchPatients()">Filter Data</button>
 
@@ -187,9 +189,9 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>ID Pasien</th>
-                            <th>Diagnosis</th>
-                            <th>Radius Mean</th>
+                            <th>Pasien (ID Kunjungan)</th>
+                            <th>Departemen - ICD10 (Jenis Tes)</th>
+                            <th>Hasil Pemeriksaan Lab</th>
                         </tr>
                     </thead>
                     <tbody id="df-body">
@@ -203,9 +205,9 @@
 
         <!-- RDD Card -->
         <div class="card">
-            <h3>Pencarian Teks Patologi (RDD / Text)</h3>
-            <label>Cari Istilah Medis:</label>
-            <input type="text" id="keywordInput" value="tumor">
+            <h3>Pencarian Log Instrumen & Batch JSON Lab (RDD)</h3>
+            <label>Cari Tes / Analyzer / Status:</label>
+            <input type="text" id="keywordInput" value="Blood Glucose">
             <button onclick="searchKeyword()">Cari Teks</button>
 
             <div id="rdd-metrics" style="margin-top: 15px;"></div>
@@ -215,7 +217,7 @@
                     <thead>
                         <tr>
                             <th style="width: 40px;">No</th>
-                            <th>Cuplikan Dokumen Patologi</th>
+                            <th>Rekaman JSON Mentah Laboratorium (Batch Stream)</th>
                         </tr>
                     </thead>
                     <tbody id="rdd-body">
@@ -266,7 +268,7 @@
                 document.getElementById('df-metrics').innerHTML = `
                     <span class="metric">⚙️ Engine: ${(json.mode || 'spark').toUpperCase()}</span>
                     <span class="metric">⏱️ Waktu Eksekusi: ${json.execution_time_sec} detik</span>
-                    <span class="metric">📊 Ditemukan: ${json.total_found} Pasien</span>
+                    <span class="metric">📊 Ditemukan: ${json.total_found} Rekaman Lab</span>
                 `;
 
                 let rowsHTML = '';
@@ -279,7 +281,7 @@
                         </tr>`;
                     });
                 } else {
-                    rowsHTML = '<tr><td colspan="3">Tidak ada data pasien yang sesuai kriteria.</td></tr>';
+                    rowsHTML = '<tr><td colspan="3">Tidak ada data pemeriksaan lab yang sesuai kriteria.</td></tr>';
                 }
                 document.getElementById('df-body').innerHTML = rowsHTML;
                 await loadExecutionAnalytics();
@@ -290,7 +292,7 @@
         }
 
         async function searchKeyword() {
-            document.getElementById('rdd-body').innerHTML = '<tr><td colspan="2">Mencari laporan teks...</td></tr>';
+            document.getElementById('rdd-body').innerHTML = '<tr><td colspan="2">Mencari rekaman JSON...</td></tr>';
             const word = document.getElementById('keywordInput').value;
 
             try {
@@ -308,7 +310,6 @@
                 let rowsHTML = '';
                 if (json.data && json.data.length > 0) {
                     json.data.forEach((line, index) => {
-                        // Fitur stabilo kuning otomatis untuk kata yang dicari
                         const regex = new RegExp(json.keyword, 'gi');
                         const highlightedText = line.replace(regex, match => `<strong style="background:yellow; color:#d9534f; padding:0 3px;">${match}</strong>`);
 
@@ -333,7 +334,7 @@
         }
 
         function makeChart(operationName, operationData) {
-            const labels = { filter_data: 'Filter Data', cari_teks: 'Cari Teks' };
+            const labels = { filter_data: 'Filter Data (Relational Join)', cari_teks: 'Cari Teks JSON (RDD)' };
             const values = ['spark', 'hadoop']
                 .map(mode => operationData[mode].average_execution_time_sec)
                 .filter(value => value !== null);

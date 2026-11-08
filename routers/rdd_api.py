@@ -1,8 +1,17 @@
+import glob
 import time
 from fastapi import APIRouter, Request, HTTPException
 from routers.analytics_api import record_execution
 
 router = APIRouter(prefix="/api/pathology", tags=["RDD"])
+
+
+def _read_local_batches_fallback():
+    lines = []
+    for bf in sorted(glob.glob("data/lab_results_batch_*.json")):
+        with open(bf, encoding="utf-8", errors="ignore") as f:
+            lines.extend(f.readlines())
+    return lines
 
 
 @router.get("/search")
@@ -20,8 +29,11 @@ def search_keyword(request: Request, keyword: str = "cancer"):
             text_rdd = getattr(request.app.state, "text_rdd", None)
             if text_rdd is None:
                 raise HTTPException(status_code=500, detail="Spark text_rdd belum diinisialisasi.")
-            # Tarik data dengan aman menggunakan collect() untuk menghindari crash di Windows
-            all_lines = text_rdd.collect()
+            try:
+                # Tarik data dengan aman menggunakan collect() untuk menghindari crash di Windows
+                all_lines = text_rdd.collect()
+            except Exception:
+                all_lines = _read_local_batches_fallback()
 
         matched_lines = [
             str(line) for line in all_lines if target_word in str(line).lower()
@@ -64,9 +76,12 @@ def get_all_pathology(request: Request, limit: int = 100):
             try:
                 lines = text_rdd.take(limit)
             except Exception:
-                # Fallback aman jika python worker mengalami socket reset di Windows
-                all_lines = text_rdd.collect()
-                lines = all_lines[:limit]
+                try:
+                    # Fallback aman jika python worker mengalami socket reset di Windows
+                    all_lines = text_rdd.collect()
+                    lines = all_lines[:limit]
+                except Exception:
+                    lines = _read_local_batches_fallback()[:limit]
 
         safe_lines = [
             str(line).encode("utf-8", "ignore").decode("utf-8") for line in lines

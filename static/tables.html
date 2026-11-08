@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Raw Data Tables - Hybrid Spark & Hadoop</title>
+    <title>Raw Data Tables - Clinical Laboratory Analytics</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, sans-serif;
@@ -78,11 +78,11 @@
         <a href="/">⬅ Kembali ke Dashboard Analytics</a>
     </div>
 
-    <h2>Tabel Dataset <span id="mode-badge" style="font-size: 0.6em; padding: 4px 10px; border-radius: 6px; background: #e2e8f0; color: #333; vertical-align: middle;">Memuat Mode...</span></h2>
+    <h2>Tabel Dataset Terintegrasi <span id="mode-badge" style="font-size: 0.6em; padding: 4px 10px; border-radius: 6px; background: #e2e8f0; color: #333; vertical-align: middle;">Memuat Mode...</span></h2>
 
     <!-- Tabel DataFrame -->
     <div class="table-container">
-        <h3>Metadata Pasien Kanker (DataFrame) <span class="badge">Preview 100 Baris</span></h3>
+        <h3>Integrasi Kunjungan Pasien & Hasil Lab Bersih (CSV + JSON DataFrame) <span class="badge">Preview 100 Baris</span></h3>
         <table id="df-table">
             <thead id="df-head"></thead>
             <tbody id="df-body">
@@ -95,12 +95,12 @@
 
     <!-- Tabel RDD / Text -->
     <div class="table-container">
-        <h3>Laporan Patologi (RDD / Text Raw) <span class="badge">Preview 100 Baris</span></h3>
+        <h3>Stream Batch Hasil Laboratorium Mentah (Nested JSON Lines / RDD) <span class="badge">Preview 100 Baris</span></h3>
         <table>
             <thead>
                 <tr>
                     <th style="width: 50px;">Baris</th>
-                    <th>Teks Dokumen (Unstructured Data)</th>
+                    <th>Rekaman JSON Mentah (Sebelum Flattening & Cleaning Veracity)</th>
                 </tr>
             </thead>
             <tbody id="rdd-body">
