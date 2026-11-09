@@ -1,22 +1,13 @@
-# Hybrid Spark & Hadoop Dashboard
+# Hybrid Spark & Hadoop Dashboard — Clinical Laboratory Data Analytics (5Vs of Big Data)
 
-Dashboard analitik data medis berbasis **FastAPI**, **Apache Spark** dan
-**Hadoop HDFS**. Aplikasi ini menyediakan antarmuka web sederhana untuk:
+Dashboard analitik data laboratorium klinis berbasis **FastAPI**, **Apache Spark**, dan **Hadoop HDFS** untuk memenuhi tugas **ETS IFB-451 Big Data (A Healthcare Informatics Approach Using the 5Vs of Big Data)**.
 
-- memfilter data pasien kanker menggunakan Spark SQL/DataFrame;
-- mencari kata kunci pada laporan patologi menggunakan Spark RDD;
-- melihat preview data terstruktur dan tidak terstruktur;
-- mengukur waktu eksekusi operasi analitik dari sisi API.
-
-> **Status implementasi:** repository ini merupakan proyek demonstrasi/laboratorium.
-> Mode aplikasi ditentukan langsung di `main.py` melalui `EXEC_MODE`. Agar seluruh
-> endpoint dashboard berjalan, gunakan mode `spark`. Mode `hadoop` saat ini
-> menginisialisasi koneksi HDFS, tetapi router analitik masih membutuhkan state
-> Spark (`spark` dan `text_rdd`).
+Studi kasus yang diangkat adalah **Clinical Laboratory Data Analytics**, yang mengintegrasikan data kunjungan pasien rumah sakit (`data/patient_encounters.csv` — 20.000 baris) dengan 5 *batch* kedatangan hasil pemeriksaan laboratorium (`data/lab_results_batch_1.json` s/d `lab_results_batch_5.json` — total 100.000 rekaman *Nested JSON*).
 
 ## Daftar Isi
 
-- [Pembagian Peran ETS & Panduan Bagian Big Data Developer](#pembagian-peran-ets--panduan-bagian-big-data-developer)
+- [Pembagian Tugas Kelompok (5 Peran ETS IFB-451)](#pembagian-tugas-kelompok-5-peran-ets-ifb-451)
+- [Panduan Kode Bagian Big Data Developer](#panduan-kode-bagian-big-data-developer)
 - [Arsitektur](#arsitektur)
 - [Teknologi](#teknologi)
 - [Struktur Proyek](#struktur-proyek)
@@ -33,15 +24,27 @@ Dashboard analitik data medis berbasis **FastAPI**, **Apache Spark** dan
 - [Catatan Pengembangan](#catatan-pengembangan)
 - [Lisensi](#lisensi)
 
-## Pembagian Peran ETS & Panduan Bagian Big Data Developer
+---
 
-Berdasarkan pembagian tugas **ETS IFB-451 Big Data (Tabel 7.1)**:
-- **Data Engineer (Segmen 3 — Modul M3–M4, Fokus: *Variety & Veracity*):** **SUDAH AKTIF**. Mencakup penyimpanan & pembacaan dari Hadoop HDFS/Spark, pembacaan multi-format (`patient_encounters.csv` & 5 batch *Nested JSON* `lab_results_batch_*.json`), *flattening* skema JSON, validasi & pembersihan kualitas data (*deduplication*, filter *missing/negative values*, standarisasi satuan `mmol/L` & `umol/L` ke `mg/dL`), serta integrasi relasional (`INNER JOIN` pada `encounter_id`) yang ditampilkan pada halaman `/tables`.
-- **Big Data Developer (Segmen 4 — Modul M5–M6, Fokus: *Volume & Velocity*):** **DIKOMENTARI / DITANDAI DI KODE**. Bagian eksekusi operasi pemrosesan Spark SQL/RDD, optimasi komputasi, simulasi pembacaan bertahap (*batch ingestion latency*), dan pengukuran rata-rata waktu eksekusi (`Spark vs Hadoop`) ditandai dengan komentar `# === [BAGIAN BIG DATA DEVELOPER] ===` agar dikerjakan/diaktifkan oleh anggota yang bertugas sebagai **Big Data Developer**.
+## Pembagian Tugas Kelompok (5 Peran ETS IFB-451)
 
-### Daftar File & Baris Kode Bagian **Big Data Developer**
+Sesuai pedoman **ETS IFB-451 Big Data (Tabel 7.1 & Tabel 7.2)**, proyek dan video presentasi berdurasi **5 menit** dibagi menjadi **5 peran anggota kelompok** yang saling terhubung dalam satu *workflow* pemrosesan data:
 
-Untuk anggota tim yang memegang peran **Big Data Developer**, berikut adalah daftar file dan bagian kode yang perlu dibuka komentarnya (*uncomment*) atau dilengkapi:
+| Segmen | Peran Anggota (*Student Role*) | Modul | Durasi Video | Fokus 5V | Tugas pada Proyek, Demo Video, & Laporan PDF (3 Halaman) |
+|---:|---|---:|---:|---|---|
+| **1** | **Project Lead / Analyst** | M1 | `0:45` | **All 5Vs** | **1. Pengantar Kasus & Karakteristik Data:**<br/>- Menjelaskan masalah kesehatan (*Clinical Laboratory Data Analytics*) dan pertanyaan utama (*Central Assignment Question*).<br/>- Menunjukkan skala dataset di folder `data/`: `patient_encounters.csv` (20.000 baris) & `lab_results_batch_1..5.json` (100.000 baris, ~30 MB) beserta kompleksitas relasinya (`1-to-Many` melalui `encounter_id`).<br/>- Merangkum bagaimana kelima karakteristik **5V** muncul pada dataset ini.<br/>- **Tugas Laporan PDF:** Menyusun **Halaman 1** (*Project Information, Case Study Title, Group Members, Dataset Description & Source*). |
+| **2** | **System Engineer** | M2 | `0:45` | **Volume & Velocity** | **2. Arsitektur Big Data & Aliran Data (*Data Flow*):**<br/>- Menjelaskan desain arsitektur *Hybrid* (**Docker Hadoop HDFS** pada `docker-compose.yml` dengan `namenode:9870` & `datanode:9864`, serta **Apache Spark** + **FastAPI** pada `main.py`).<br/>- Menjelaskan bagaimana arsitektur ini menangani **Volume** (penyimpanan blok HDFS & pemrosesan paralel `local[*]`) dan **Velocity** (aliran *ingestion* 5 *batch* JSON bertahap).<br/>- **Tugas Laporan PDF:** Menyusun **Halaman 3** (*System Architecture Diagram: Data Sources, Ingestion, Storage, Processing, Integration, Analysis & Outputs*). |
+| **3** | **Data Engineer** *(Sudah Aktif)* | M3–M4 | `1:00` | **Variety & Veracity** | **3. Penyimpanan, Integrasi Skema, & Kualitas Data:**<br/>- **Storage & Variety:** Mendemonstrasikan pembacaan 2 format berbeda (**CSV** tabular & **Nested JSON** `test_details.*`, `instrument_metadata.*`), proses *flattening* skema JSON di `main.py`, dan penyimpanan di HDFS.<br/>- **Veracity (Data Cleaning & Validation):** Menunjukkan bukti **Before vs After Cleaning** di terminal (`main.py` baris 177–232): penghapusan duplikat CSV & JSON, filter *missing values* (`null`) & nilai error (`-999.0`), serta konversi/standarisasi satuan `mmol/L` & `umol/L` menjadi `mg/dL`.<br/>- **Integration:** Mendemonstrasikan `INNER JOIN` berdasarkan `encounter_id` + validasi *timestamp* (`test_batch_timestamp >= admission_timestamp`) serta menampilkan hasilnya di halaman `/tables` (`static/tables.html`).<br/>- **Tugas Laporan PDF:** Mengisi bagian bukti **Variety & Veracity** pada **Halaman 2**. |
+| **4** | **Big Data Developer** *(Ditandai Komentar di Kode)* | M5–M6 | `1:15` | **Volume & Velocity** | **4. Pemrosesan Data & Kompleksitas Komputasi:**<br/>- Membuka komentar (*uncomment*) dan menjalankan kode berlabel `# === [BAGIAN BIG DATA DEVELOPER] ===`.<br/>- **Velocity:** Menunjukkan log pengukuran *ingestion latency* per *batch* (`Batch 1` s/d `Batch 5`) saat data dimuat ke Spark/HDFS.<br/>- **Volume & Computational Complexity:** Menjelaskan optimasi komputasi (`.cache()`, `spark.sql.shuffle.partitions = 4`) serta membandingkan eksekusi query relasional **Spark SQL** (`GET /api/patients/filter` di `routers/dataframe_api.py`) dan pencarian teks **Spark RDD** (`GET /api/pathology/search` di `routers/rdd_api.py`).<br/>- **Performance Reporting:** Menunjukkan grafik perbandingan rata-rata waktu eksekusi (**Spark vs Hadoop**) melalui `routers/analytics_api.py` dan dashboard `static/index.html`.<br/>- **Tugas Laporan PDF:** Mengisi bagian bukti **Volume & Velocity** pada **Halaman 2**. |
+| **5** | **Data Analyst** | M7 | `1:15` | **Veracity & Value** | **5. Hasil Analitik & Interpretasi Klinis (*Healthcare Interpretation*):**<br/>- Menjalankan query analitik pada dashboard (`/`) untuk menjawab masalah klinis: mengidentifikasi pasien kondisi kritis di departemen **ICU / ER / Cardiology** dengan nilai hasil lab abnormal (misal *Blood Glucose* tinggi atau status `CRITICAL`).<br/>- Menjelaskan dampak **Veracity** terhadap analisis (mengapa standarisasi satuan `mmol/L` ke `mg/dL` dan penghapusan nilai `-999` sangat krusial agar tidak terjadi salah diagnosis/bias kapasitas RS).<br/>- Menjelaskan **Value** (manfaat hasil analisis untuk perencanaan kapasitas departemen & *laboratory utilisation*) beserta keterbatasan (*limitations*) dari dataset sintetis.<br/>- **Tugas Laporan PDF:** Mengisi bagian bukti **Value**, kesimpulan klinis, dan link YouTube pada **Halaman 2**. |
+
+---
+
+## Panduan Kode Bagian Big Data Developer
+
+Saat ini, bagian **Data Engineer (Segmen 3 — M3–M4)** sudah aktif sepenuhnya, sedangkan bagian **Big Data Developer (Segmen 4 — M5–M6)** sengaja ditandai dengan komentar `# === [BAGIAN BIG DATA DEVELOPER] ===` di dalam kode.
+
+### Daftar File & Baris Kode yang Perlu Diaktifkan oleh **Big Data Developer**
 
 | No | File | Baris / Blok Penanda | Tugas & Fungsi (Modul M5–M6: Volume & Velocity) |
 |---:|---|---|---|
@@ -52,11 +55,6 @@ Untuk anggota tim yang memegang peran **Big Data Developer**, berikut adalah daf
 | 5 | `routers/rdd_api.py` | `# [BAGIAN BIG DATA DEVELOPER (M5-M6)]` — Fungsi `search_keyword` (`GET /api/pathology/search`, Baris 18–65) | Menjalankan operasi pencarian kata kunci pada 100.000 rekaman JSON menggunakan **Spark RDD** (`text_rdd.collect()`), menghitung waktu eksekusi, dan mencatatnya dengan `record_execution(request, "cari_teks", exec_time)`. |
 | 6 | `routers/analytics_api.py` | `# [BAGIAN BIG DATA DEVELOPER (M5-M6)]` (Seluruh isi file, Baris 1–49) | Menyimpan riwayat waktu eksekusi di memori dan menyediakan endpoint `GET /api/analytics/execution-summary` untuk menghitung rata-rata waktu eksekusi (*average*) dan waktu terakhir (*latest*) antara **Spark vs Hadoop**. |
 | 7 | `static/index.html` | `<!-- [BAGIAN BIG DATA DEVELOPER (M5-M6)] -->` (Baris 168–244 & Baris 382–385) | Menampilkan UI **Dashboard Analitik Waktu Eksekusi (Spark vs Hadoop)**, kartu **Filter Utilisasi & Hasil Lab (DataFrame SQL Join)**, kartu **Pencarian Log Instrumen & Batch JSON Lab (RDD)**, serta mengaktifkan kembali pemanggilan `loadExecutionAnalytics()`, `fetchPatients()`, dan `searchKeyword()` pada `window.onload`. |
-
-### Checklist Demonstrasi Video untuk **Big Data Developer** (Durasi 1:15 — Segmen 4)
-1. **Bukti Velocity (Terminal):** Tunjukkan log terminal saat server dinyalakan yang menampilkan waktu muat (*ingestion latency*) per *batch* (`Batch 1` s/d `Batch 5`, masing-masing 20.000 baris JSON).
-2. **Bukti Kompleksitas Komputasi & Volume (Kode):** Tunjukkan perbedaan pemrosesan sederhana vs pemrosesan relasional (`JOIN` antara CSV & JSON yang dioptimasi dengan `spark.sql.shuffle.partitions = 4` dan `.cache()`).
-3. **Bukti Performa Pemrosesan (Dashboard Web `/`):** Jalankan fitur **Filter Data (Spark SQL)** dan **Cari Teks (Spark RDD)** di browser, lalu tunjukkan perbandingan rata-rata waktu eksekusi (`execution_time_sec`) antara mode **Spark** dan **Hadoop**.
 
 ## Arsitektur
 
@@ -309,20 +307,23 @@ Dataset harus dimasukkan ke HDFS secara manual, misalnya:
 
 ```mermaid
 flowchart TD
-    HOST["data/*.csv di host"] -->|docker cp| TMP["File sementara<br/>di container namenode"]
-    TMP -->|hdfs dfs -put|     HDFS["HDFS /data"]
-    HDFS --> MTS["/data/mtsamples.csv"]
-    HDFS --> BC["/data/breast_cancer_data.csv"]
+    HOST["data/*.csv & *.json di host"] -->|docker cp| TMP["File sementara<br/>di container namenode"]
+    TMP -->|hdfs dfs -put| HDFS["HDFS /data"]
+    HDFS --> ENC["/data/patient_encounters.csv"]
+    HDFS --> LAB["/data/lab_results_batch_1..5.json"]
 ```
 
 Contoh perintah:
 
 ```powershell
-docker cp data\mtsamples.csv namenode:/tmp/mtsamples.csv
-docker cp data\breast_cancer_data.csv namenode:/tmp/breast_cancer_data.csv
 docker exec namenode hdfs dfs -mkdir -p /data
-docker exec namenode hdfs dfs -put -f /tmp/mtsamples.csv /data/
-docker exec namenode hdfs dfs -put -f /tmp/breast_cancer_data.csv /data/
+docker cp data\patient_encounters.csv namenode:/tmp/patient_encounters.csv
+docker exec namenode hdfs dfs -put -f /tmp/patient_encounters.csv /data/
+
+for ($i=1; $i -le 5; $i++) {
+    docker cp "data\lab_results_batch_$i.json" "namenode:/tmp/lab_results_batch_$i.json"
+    docker exec namenode hdfs dfs -put -f "/tmp/lab_results_batch_$i.json" /data/
+}
 ```
 
 Dalam mode Hadoop, `InsecureClient("http://localhost:9870", user="root")`
@@ -349,40 +350,40 @@ ada job MapReduce atau Spark-on-YARN.
 ```text
 .
 ├── data/
-│   ├── breast_cancer_data.csv    # Data kanker berbentuk tabular
-│   └── mtsamples.csv             # Laporan patologi berbentuk teks
+│   ├── patient_encounters.csv       # Data kunjungan pasien RS (20.000 baris CSV)
+│   └── lab_results_batch_1..5.json  # 5 Batch hasil lab klinis (100.000 baris Nested JSON)
 ├── routers/
-│   ├── dataframe_api.py          # Endpoint Spark SQL/DataFrame
-│   └── rdd_api.py                # Endpoint Spark RDD
+│   ├── dataframe_api.py             # Endpoint Spark SQL/DataFrame
+│   ├── rdd_api.py                   # Endpoint Spark RDD
+│   └── analytics_api.py             # Endpoint metrik rata-rata waktu eksekusi
 ├── static/
-│   ├── index.html                # Dashboard analitik
-│   └── tables.html               # Preview data mentah
-├── docker-compose.yml            # Konfigurasi Hadoop HDFS
-├── main.py                       # Inisialisasi FastAPI dan Spark/HDFS
+│   ├── index.html                   # Dashboard analitik 5V
+│   └── tables.html                  # Preview data terintegrasi & JSON mentah
+├── docker-compose.yml               # Konfigurasi Hadoop HDFS
+├── main.py                          # Inisialisasi FastAPI dan pipeline Spark/HDFS
 └── README.md
 ```
 
 ## Dataset
 
-### `data/breast_cancer_data.csv`
+### 1. `data/patient_encounters.csv` (Tabular CSV — ~20.000 Baris)
 
-Dataset tabular dengan kolom utama:
+Dataset kunjungan pasien rumah sakit dengan kolom utama:
+- `encounter_id`: ID unik kunjungan pasien (kunci relasi *join*);
+- `patient_id`: ID pasien;
+- `age`, `gender`: Demografi pasien;
+- `department`: Departemen layanan (`ICU`, `ER`, `Cardiology`, `Inpatient`, `Outpatient`);
+- `admission_timestamp`: Waktu masuk pasien;
+- `diagnosis_code`: Kode diagnosis klinis (ICD-10).
 
-- `id`: identitas sampel;
-- `diagnosis`: `M` untuk malignant dan `B` untuk benign;
-- `radius_mean`: nilai radius rata-rata;
-- kolom fitur tumor lainnya seperti `texture_mean`, `area_mean`,
-  `smoothness_mean`, dan fitur `*_worst`.
+### 2. `data/lab_results_batch_1.json` s/d `lab_results_batch_5.json` (Nested JSON Lines — 100.000 Baris)
 
-File ini dibaca oleh Spark dengan `header=True` dan `inferSchema=True`, lalu
-daftarkan sebagai temporary view bernama `patients`.
+Lima *batch* kedatangan hasil pemeriksaan laboratorium klinis (masing-masing 20.000 baris) dengan struktur bersarang (*nested schema*):
+- `lab_record_id`, `encounter_id`, `test_batch_timestamp`;
+- `test_details`: `{ "test_name", "result_value", "unit", "reference_range" }`;
+- `instrument_metadata`: `{ "analyzer_id", "status" }`.
 
-### `data/mtsamples.csv`
-
-Dataset laporan medis tidak terstruktur. Kolom yang tersedia antara lain
-`description`, `medical_specialty`, `sample_name`, `transcription`, dan
-`keywords`. File ini dimuat sebagai RDD berbasis baris teks untuk pencarian
-keyword.
+Dataset ini juga memuat tantangan **Veracity** nyata (baris duplikat, *missing values*, nilai error `-999.0`, serta satuan `mmol/L` dan `umol/L` yang harus distandarisasi ke `mg/dL`) yang dibersihkan dan diintegrasikan dengan `patient_encounters.csv` menjadi temporary view `patients`.
 
 ## Prasyarat
 
