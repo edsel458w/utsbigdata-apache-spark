@@ -141,7 +141,9 @@ elif EXEC_MODE == "spark":
              .config("spark.sql.execution.arrow.pyspark.enabled", "false")
              .config("spark.sql.ansi.enabled", "false")
              .config("spark.sql.shuffle.partitions", "4") # Optimasi JOIN untuk 100rb baris
+             .config("spark.ui.showConsoleProgress", "false") # Cegah progress bar Spark menimpa print di terminal
              .getOrCreate())
+    spark.sparkContext.setLogLevel("ERROR")
 
     app.state.spark = spark
 
@@ -180,15 +182,17 @@ elif EXEC_MODE == "spark":
         col("instrument_metadata.status").alias("status")
     )
 
-    # 4. VERACITY: Validasi & Pembersihan Kualitas Data (Before vs After)
+    # =========================================================================
+    # [BAGIAN DATA ENGINEER - VERACITY: 4 TAHAP PEMBERSIHAN DATA SEBELUM JOIN]
+    # =========================================================================
     raw_enc_count = df_enc_raw.count()
     raw_lab_count = df_lab_flat.count()
 
-    # [OPTIMASI 2] Cache hasil deduplikasi agar perhitungan metrik Veracity tidak baca disk berulang-ulang
+    # ---> [VERACITY 1 - PERTAMA]: Menghapus rekaman duplikat menggunakan dropDuplicates()
     df_enc_clean = df_enc_raw.dropDuplicates().cache()
     df_lab_dedup = df_lab_flat.dropDuplicates(["lab_record_id"]).cache()
 
-    # Hitung detail masalah Veracity sebelum difilter
+    # Hitung jumlah duplikat, nilai kosong (null), dan nilai error (-999) untuk bukti Before vs After
     dup_enc = raw_enc_count - df_enc_clean.count()
     dup_lab = raw_lab_count - df_lab_dedup.count()
     missing_cnt = df_lab_dedup.filter(
@@ -196,7 +200,7 @@ elif EXEC_MODE == "spark":
     ).count()
     neg_cnt = df_lab_dedup.filter(col("result_value").cast("double") < 0).count()
 
-    # Filter nilai hilang (null / string kosong) dan nilai negatif (-999)
+    # ---> [VERACITY 2 - KEDUA]: Memfilter nilai hasil lab yang kosong (null) serta nilai error kalibrasi negatif (-999)
     df_lab_valid = df_lab_dedup.filter(
         col("result_value").isNotNull() &
         (col("result_value").cast("string") != "") &
@@ -205,7 +209,9 @@ elif EXEC_MODE == "spark":
 
     inconsistent_unit_cnt = df_lab_valid.filter(col("unit").isin("mmol/L", "umol/L")).count()
 
-    # Standarisasi satuan yang tidak konsisten (mmol/L & umol/L -> mg/dL)
+    # ---> [VERACITY 3 - KETIGA]: Mengatasi Inconsistent Units dengan when-otherwise PySpark
+    #      - Blood Glucose (mmol/L) dikali 18.0 -> mg/dL
+    #      - Creatinine (umol/L) dibagi 88.4    -> mg/dL
     df_lab_standardized = df_lab_valid.withColumn(
         "result_value",
         when((col("test_name") == "Blood Glucose") & (col("unit") == "mmol/L"),
@@ -220,22 +226,28 @@ elif EXEC_MODE == "spark":
         .otherwise(col("unit"))
     )
 
-    # 5. VOLUME & VALUE: Integrasi Relasional (JOIN) & Filter Timestamp Valid
-    # [OPTIMASI 3] Cache tabel hasil JOIN agar saat difilter lewat API tidak menghitung ulang JOIN dari awal!
+    # ---> [VERACITY 4 & INTEGRASI - KEEMPAT]: Integrasi Relasional (INNER JOIN) & Filter Timestamp Valid
+    #      Memastikan waktu pemeriksaan lab >= waktu pasien masuk (admission_timestamp)
     df_joined = df_enc_clean.join(df_lab_standardized, on="encounter_id", how="inner") \
         .filter(col("test_batch_timestamp") >= col("admission_timestamp")) \
         .cache()
 
+    clean_enc_count = df_enc_clean.count()
+    dedup_lab_count = df_lab_dedup.count()
+    valid_lab_count = df_lab_valid.count()
     clean_joined_count = df_joined.count() # Memicu materialisasi cache ke RAM Spark
 
-    print("\n================ [VERACITY] BUKTI BEFORE vs AFTER CLEANING ================")
-    print(f" 1. Duplikat CSV Encounters : {dup_enc} baris ditemukan -> Dihapus (Sisa: {df_enc_clean.count()} baris)")
-    print(f" 2. Duplikat JSON Lab       : {dup_lab} baris ditemukan -> Dihapus (Sisa: {df_lab_dedup.count()} baris)")
-    print(f" 3. Missing Results (Null)  : {missing_cnt} baris ditemukan -> Difilter/Dihapus")
-    print(f" 4. Nilai Error (-999.0)    : {neg_cnt} baris ditemukan -> Difilter/Dihapus")
-    print(f" 5. Satuan Tidak Konsisten  : {inconsistent_unit_cnt} baris (mmol/L & umol/L) -> Dikonversi ke mg/dL (Sisa: 0)")
-    print(f" 6. Total Data Terintegrasi : {clean_joined_count} rekaman bersih siap dianalisis (JOIN CSV + JSON)")
-    print("===========================================================================\n")
+    veracity_report = (
+        "\n================ [VERACITY] BUKTI BEFORE vs AFTER CLEANING ================\n"
+        f" 1. Duplikat CSV Encounters : {dup_enc} baris ditemukan -> Dihapus (Awal: {raw_enc_count} -> Sisa: {clean_enc_count} baris)\n"
+        f" 2. Duplikat JSON Lab       : {dup_lab} baris ditemukan -> Dihapus (Awal: {raw_lab_count} -> Sisa: {dedup_lab_count} baris)\n"
+        f" 3. Missing Results (Null)  : {missing_cnt} baris ditemukan -> Difilter/Dihapus (Sisa: {dedup_lab_count - missing_cnt} baris)\n"
+        f" 4. Nilai Error (-999.0)    : {neg_cnt} baris ditemukan -> Difilter/Dihapus (Sisa: {valid_lab_count} baris)\n"
+        f" 5. Satuan Tidak Konsisten  : {inconsistent_unit_cnt} baris (mmol/L & umol/L) -> Dikonversi ke mg/dL (Sisa: 0)\n"
+        f" 6. Total Data Terintegrasi : {clean_joined_count} rekaman bersih siap dianalisis (JOIN CSV + JSON)\n"
+        "===========================================================================\n"
+    )
+    print(veracity_report, flush=True)
 
     # Daftarkan sebagai temporary view 'patients'
     df_joined.createOrReplaceTempView("patients")
