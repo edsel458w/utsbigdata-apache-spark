@@ -6,16 +6,18 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from routers import analytics_api, dataframe_api, rdd_api
+from routers import dataframe_api, rdd_api
+# === [BAGIAN BIG DATA DEVELOPER: Modul Pengukuran Performa Komputasi] ===
+# from routers import analytics_api
 
 os.environ["PYSPARK_PYTHON"] = "python"
 
 app = FastAPI(title="Hybrid Spark & Hadoop Dashboard - Clinical Lab 5V")
-analytics_api.initialise_metrics(app)
+# analytics_api.initialise_metrics(app)
 
 # === PILIH MODE DI SINI SECARA LANGSUNG ===
 # Ubah nilai di bawah menjadi "hadoop" atau "spark"
-EXEC_MODE = os.getenv("EXEC_MODE", "hadoop").lower()
+EXEC_MODE = os.getenv("EXEC_MODE", "spark").lower()
 app.state.execution_mode = EXEC_MODE
 
 if EXEC_MODE == "hadoop":
@@ -40,17 +42,18 @@ if EXEC_MODE == "hadoop":
         hdfs_client = InsecureClient('http://localhost:9870', user='root', session=hdfs_session)
         app.state.hdfs_client = hdfs_client
 
-        # 1. VELOCITY (HDFS): Baca kelima batch JSON secara berurutan dari HDFS
+        # 1. Baca kelima batch JSON dari HDFS (Penyimpanan Terdistribusi - Data Engineer)
         all_text_lines = []
-        print("\n=== [VELOCITY - HADOOP HDFS] MENGUKUR INGESTION LATENCY PER BATCH ===")
+        # === [BAGIAN BIG DATA DEVELOPER: Pengukuran Latensi Ingestion (Velocity)] ===
+        # print("\n=== [VELOCITY - HADOOP HDFS] MENGUKUR INGESTION LATENCY PER BATCH ===")
         for b in range(1, 6):
-            t0 = time.time()
+            # t0 = time.time()
             hdfs_path = f'/data/lab_results_batch_{b}.json'
             with hdfs_client.read(hdfs_path, encoding='utf-8') as reader:
                 batch_lines = reader.readlines()
                 all_text_lines.extend(batch_lines)
-            dt = round(time.time() - t0, 4)
-            print(f" -> HDFS Batch {b} ({hdfs_path}): {len(batch_lines)} rekaman dimuat dalam {dt} detik")
+            # dt = round(time.time() - t0, 4)
+            # print(f" -> HDFS Batch {b} ({hdfs_path}): {len(batch_lines)} rekaman dimuat dalam {dt} detik")
 
         app.state.hadoop_text_data = all_text_lines
 
@@ -142,22 +145,25 @@ elif EXEC_MODE == "spark":
 
     app.state.spark = spark
 
-    # 1. RDD untuk pencarian teks mentah pada JSON hasil lab
+    # 1. Baca file JSON hasil lab untuk preview raw data
     batch_files = [bf.replace("\\", "/") for bf in sorted(glob.glob("data/lab_results_batch_*.json"))]
-    # [OPTIMASI 1] Tambahkan .cache() pada text_rdd dan picu dengan .count() saat startup
-    app.state.text_rdd = spark.sparkContext.textFile(",".join(batch_files)).cache()
-    app.state.text_rdd.count()
+    app.state.text_rdd = spark.sparkContext.textFile(",".join(batch_files))
+    # === [BAGIAN BIG DATA DEVELOPER: Optimasi In-Memory Caching RDD & Pengukuran Velocity] ===
+    # app.state.text_rdd = app.state.text_rdd.cache()
+    # app.state.text_rdd.count()
+    #
+    # df_lab_raw = None
+    # print("\n=== [VELOCITY - SPARK] MENGUKUR INGESTION LATENCY PER BATCH ===")
+    # for bf in batch_files:
+    #     t0 = time.time()
+    #     b_df = spark.read.json(bf)
+    #     cnt = b_df.count()
+    #     dt = round(time.time() - t0, 4)
+    #     print(f" -> Batch {os.path.basename(bf)}: {cnt} rekaman dimuat dalam {dt} detik")
+    #     df_lab_raw = b_df if df_lab_raw is None else df_lab_raw.unionByName(b_df)
 
-    # 2. VELOCITY: Simulasi pembacaan 5 batch bertahap & ukur latensi ingestion
-    df_lab_raw = None
-    print("\n=== [VELOCITY - SPARK] MENGUKUR INGESTION LATENCY PER BATCH ===")
-    for bf in batch_files:
-        t0 = time.time()
-        b_df = spark.read.json(bf)
-        cnt = b_df.count()
-        dt = round(time.time() - t0, 4)
-        print(f" -> Batch {os.path.basename(bf)}: {cnt} rekaman dimuat dalam {dt} detik")
-        df_lab_raw = b_df if df_lab_raw is None else df_lab_raw.unionByName(b_df)
+    # Pembacaan dataset JSON Lab untuk integrasi Data Engineer (Variety & Veracity)
+    df_lab_raw = spark.read.json(batch_files)
 
     # 3. VARIETY: Baca CSV Kunjungan & Ratakan (Flatten) Skema Nested JSON Lab
     df_enc_raw = spark.read.csv("data/patient_encounters.csv", header=True, inferSchema=True) \
@@ -236,7 +242,8 @@ elif EXEC_MODE == "spark":
 
 app.include_router(dataframe_api.router)
 app.include_router(rdd_api.router)
-app.include_router(analytics_api.router)
+# === [BAGIAN BIG DATA DEVELOPER: Router Analitik Waktu Eksekusi] ===
+# app.include_router(analytics_api.router)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/api/mode")

@@ -157,6 +157,18 @@
 
     <div class="container">
 
+        <!-- === [BAGIAN DATA ENGINEER (M3-M4): Storage, Variety, Veracity & Integration] === -->
+        <div class="card" style="width: 100%;">
+            <h3>📦 Ringkasan Pipeline Data Engineer (Storage, Variety, Veracity & Integration)</h3>
+            <p>Bagian <strong>Data Engineer</strong> telah memproses penyimpanan (HDFS/Spark), meratakan skema <em>Nested JSON</em> (<strong>Variety</strong>), membersihkan duplikat, nilai kosong/negatif, serta menstandarisasi satuan <code>mmol/L</code> &amp; <code>umol/L</code> ke <code>mg/dL</code> (<strong>Veracity</strong>), lalu mengintegrasikan tabel kunjungan pasien CSV dengan hasil lab JSON melalui <code>encounter_id</code>.</p>
+            <p>Silakan klik tombol <strong>"Lihat Full Raw Data (CSV &amp; JSON)"</strong> di atas untuk melihat bukti tabel sebelum &amp; sesudah integrasi, atau buka komentar pada bagian <strong>Big Data Developer</strong> di bawah ini untuk menjalankan pengujian query &amp; waktu eksekusi.</p>
+        </div>
+
+        <!-- =================================================================================
+             [BAGIAN BIG DATA DEVELOPER (M5-M6): Eksekusi Pemrosesan & Performa Komputasi]
+             Buka komentar HTML di bawah ini saat bagian Big Data Developer akan dijalankan
+        ================================================================================== -->
+        <!--
         <div class="card analytics-card">
             <div class="analytics-header">
                 <h3>Dashboard Analitik Waktu Eksekusi (Spark vs Hadoop)</h3>
@@ -169,7 +181,6 @@
             <div class="chart-grid" id="execution-charts"></div>
         </div>
 
-        <!-- DataFrame Card -->
         <div class="card">
             <h3>Filter Utilisasi & Hasil Lab (DataFrame SQL Join)</h3>
             <label>Nilai Hasil Lab Min:</label>
@@ -203,7 +214,6 @@
             </div>
         </div>
 
-        <!-- RDD Card -->
         <div class="card">
             <h3>Pencarian Log Instrumen & Batch JSON Lab (RDD)</h3>
             <label>Cari Tes / Analyzer / Status:</label>
@@ -228,6 +238,7 @@
                 </table>
             </div>
         </div>
+        -->
 
     </div>
 
@@ -368,9 +379,10 @@
 
         window.onload = () => {
             loadModeBadge();
-            loadExecutionAnalytics();
-            fetchPatients();
-            searchKeyword();
+            // === [BAGIAN BIG DATA DEVELOPER: Pemanggilan Fungsi Eksekusi & Analitik Performa] ===
+            // loadExecutionAnalytics();
+            // fetchPatients();
+            // searchKeyword();
         };
     </script>
 </body>

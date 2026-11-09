@@ -16,6 +16,7 @@ Dashboard analitik data medis berbasis **FastAPI**, **Apache Spark** dan
 
 ## Daftar Isi
 
+- [Pembagian Peran ETS & Panduan Bagian Big Data Developer](#pembagian-peran-ets--panduan-bagian-big-data-developer)
 - [Arsitektur](#arsitektur)
 - [Teknologi](#teknologi)
 - [Struktur Proyek](#struktur-proyek)
@@ -31,6 +32,31 @@ Dashboard analitik data medis berbasis **FastAPI**, **Apache Spark** dan
 - [Troubleshooting](#troubleshooting)
 - [Catatan Pengembangan](#catatan-pengembangan)
 - [Lisensi](#lisensi)
+
+## Pembagian Peran ETS & Panduan Bagian Big Data Developer
+
+Berdasarkan pembagian tugas **ETS IFB-451 Big Data (Tabel 7.1)**:
+- **Data Engineer (Segmen 3 — Modul M3–M4, Fokus: *Variety & Veracity*):** **SUDAH AKTIF**. Mencakup penyimpanan & pembacaan dari Hadoop HDFS/Spark, pembacaan multi-format (`patient_encounters.csv` & 5 batch *Nested JSON* `lab_results_batch_*.json`), *flattening* skema JSON, validasi & pembersihan kualitas data (*deduplication*, filter *missing/negative values*, standarisasi satuan `mmol/L` & `umol/L` ke `mg/dL`), serta integrasi relasional (`INNER JOIN` pada `encounter_id`) yang ditampilkan pada halaman `/tables`.
+- **Big Data Developer (Segmen 4 — Modul M5–M6, Fokus: *Volume & Velocity*):** **DIKOMENTARI / DITANDAI DI KODE**. Bagian eksekusi operasi pemrosesan Spark SQL/RDD, optimasi komputasi, simulasi pembacaan bertahap (*batch ingestion latency*), dan pengukuran rata-rata waktu eksekusi (`Spark vs Hadoop`) ditandai dengan komentar `# === [BAGIAN BIG DATA DEVELOPER] ===` agar dikerjakan/diaktifkan oleh anggota yang bertugas sebagai **Big Data Developer**.
+
+### Daftar File & Baris Kode Bagian **Big Data Developer**
+
+Untuk anggota tim yang memegang peran **Big Data Developer**, berikut adalah daftar file dan bagian kode yang perlu dibuka komentarnya (*uncomment*) atau dilengkapi:
+
+| No | File | Baris / Blok Penanda | Tugas & Fungsi (Modul M5–M6: Volume & Velocity) |
+|---:|---|---|---|
+| 1 | `main.py` | `# === [BAGIAN BIG DATA DEVELOPER: Modul Pengukuran Performa Komputasi] ===` (Baris 10–16 & 245) | Mengimpor `analytics_api`, menjalankan `analytics_api.initialise_metrics(app)`, dan mendaftarkan `app.include_router(analytics_api.router)`. |
+| 2 | `main.py` | `# === [BAGIAN BIG DATA DEVELOPER: Pengukuran Latensi Ingestion (Velocity)] ===` (Baris 46–56) | Mengukur waktu baca (*ingestion latency*) per *batch* (`t0 = time.time()`) saat memuat 5 file JSON dari **Hadoop HDFS**. |
+| 3 | `main.py` | `# === [BAGIAN BIG DATA DEVELOPER: Optimasi In-Memory Caching RDD & Pengukuran Velocity] ===` (Baris 151–165) | Mengaktifkan `.cache()` pada `text_rdd`, membaca 5 *batch* JSON secara bertahap dengan `spark.read.json(bf)` + `.unionByName()`, serta mencetak *ingestion latency* per *batch* di terminal untuk bukti **Velocity**. |
+| 4 | `routers/dataframe_api.py` | `# [BAGIAN BIG DATA DEVELOPER (M5-M6)]` — Fungsi `filter_patients` (`GET /api/patients/filter`, Baris 10–77) | Menjalankan query pemrosesan relasional **Spark SQL** (`WHERE department = ... AND result_value >= ...`) di atas view `patients`, menghitung waktu eksekusi (`exec_time`), dan mencatatnya dengan `record_execution(request, "filter_data", exec_time)`. |
+| 5 | `routers/rdd_api.py` | `# [BAGIAN BIG DATA DEVELOPER (M5-M6)]` — Fungsi `search_keyword` (`GET /api/pathology/search`, Baris 18–65) | Menjalankan operasi pencarian kata kunci pada 100.000 rekaman JSON menggunakan **Spark RDD** (`text_rdd.collect()`), menghitung waktu eksekusi, dan mencatatnya dengan `record_execution(request, "cari_teks", exec_time)`. |
+| 6 | `routers/analytics_api.py` | `# [BAGIAN BIG DATA DEVELOPER (M5-M6)]` (Seluruh isi file, Baris 1–49) | Menyimpan riwayat waktu eksekusi di memori dan menyediakan endpoint `GET /api/analytics/execution-summary` untuk menghitung rata-rata waktu eksekusi (*average*) dan waktu terakhir (*latest*) antara **Spark vs Hadoop**. |
+| 7 | `static/index.html` | `<!-- [BAGIAN BIG DATA DEVELOPER (M5-M6)] -->` (Baris 168–244 & Baris 382–385) | Menampilkan UI **Dashboard Analitik Waktu Eksekusi (Spark vs Hadoop)**, kartu **Filter Utilisasi & Hasil Lab (DataFrame SQL Join)**, kartu **Pencarian Log Instrumen & Batch JSON Lab (RDD)**, serta mengaktifkan kembali pemanggilan `loadExecutionAnalytics()`, `fetchPatients()`, dan `searchKeyword()` pada `window.onload`. |
+
+### Checklist Demonstrasi Video untuk **Big Data Developer** (Durasi 1:15 — Segmen 4)
+1. **Bukti Velocity (Terminal):** Tunjukkan log terminal saat server dinyalakan yang menampilkan waktu muat (*ingestion latency*) per *batch* (`Batch 1` s/d `Batch 5`, masing-masing 20.000 baris JSON).
+2. **Bukti Kompleksitas Komputasi & Volume (Kode):** Tunjukkan perbedaan pemrosesan sederhana vs pemrosesan relasional (`JOIN` antara CSV & JSON yang dioptimasi dengan `spark.sql.shuffle.partitions = 4` dan `.cache()`).
+3. **Bukti Performa Pemrosesan (Dashboard Web `/`):** Jalankan fitur **Filter Data (Spark SQL)** dan **Cari Teks (Spark RDD)** di browser, lalu tunjukkan perbandingan rata-rata waktu eksekusi (`execution_time_sec`) antara mode **Spark** dan **Hadoop**.
 
 ## Arsitektur
 
